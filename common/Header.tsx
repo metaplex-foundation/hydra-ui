@@ -1,8 +1,6 @@
 import { useWallet } from '@solana/wallet-adapter-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
-import { AccountConnect } from '@cardinal/namespaces-components'
 
-import { Wallet } from '@saberhq/solana-contrib'
 import { useRouter } from 'next/router'
 import { ENVIRONMENTS, useEnvironmentCtx } from 'providers/EnvironmentProvider'
 import styled from '@emotion/styled'
@@ -25,25 +23,25 @@ export const Header = () => {
   const wallet = useWallet()
 
   function updateQueryParameter() {
-    const url = new URL(window.location.href);
-  
+    const url = new URL(window.location.href)
+
     const currentCluster = ctx.environment.label
-  
-    let newCluster;
+
+    let newCluster: Cluster;
     if (currentCluster === null) {
-        newCluster = 'devnet'; // Parameter does not exist, so set it to 'devnet'
+      newCluster = 'devnet' // Parameter does not exist, so set it to 'devnet'
     } else if (currentCluster === 'devnet') {
-        newCluster = 'mainnet-beta';
+      newCluster = 'mainnet-beta'
     } else if (currentCluster === 'mainnet-beta') {
-        newCluster = 'devnet';
+      newCluster = 'devnet'
     } else {
-        newCluster = currentCluster;
+      newCluster = currentCluster
     }
-    const newEnv = ENVIRONMENTS.find(env => env.label === newCluster);
-    if (!newEnv) return;
+    const newEnv = ENVIRONMENTS.find((env) => env.label === newCluster)
+    if (!newEnv) return
     ctx.setEnvironment(newEnv)
-    url.searchParams.set('cluster', newCluster);
-    window.history.replaceState(null, '', url.toString());
+    url.searchParams.set('cluster', newCluster)
+    window.history.replaceState(null, '', url.toString())
   }
 
   return (
@@ -63,13 +61,14 @@ export const Header = () => {
         >
           Hydra UI
         </div>
-        {/* {ctx.environment.label !== 'mainnet-beta' && ( */}
         <Tooltip content="Switch Network">
-          <div className="cursor-pointer rounded-md bg-[#9945ff] p-1 text-[10px] italic text-white" onClick={updateQueryParameter}>
+          <div
+            className="cursor-pointer rounded-md bg-[#9945ff] p-1 text-[10px] italic text-white"
+            onClick={updateQueryParameter}
+          >
             {ctx.environment.label}
           </div>
         </Tooltip>
-        {/* )} */}
       </div>
 
       <div className="relative my-auto flex items-center pr-8 align-middle">
@@ -88,25 +87,16 @@ export const Header = () => {
             <p className="my-auto mr-10 hover:cursor-pointer">Create</p>
           </div>
         </div>
-        {wallet.connected && wallet.publicKey ? (
-          <AccountConnect
-            connection={ctx.connection}
-            environment={ctx.environment.label as Cluster}
-            handleDisconnect={() => wallet.disconnect()}
-            wallet={wallet as Wallet}
-          />
-        ) : (
-          <StyledWalletButton
-            style={{
-              fontSize: '14px',
-              zIndex: 10,
-              height: '38px',
-              border: 'none',
-              background: 'none',
-              backgroundColor: 'none',
-            }}
-          />
-        )}
+        <StyledWalletButton
+          style={{
+            fontSize: '14px',
+            zIndex: 10,
+            height: '38px',
+            border: 'none',
+            background: 'none',
+            backgroundColor: 'none',
+          }}
+        />
       </div>
     </div>
   )

@@ -43,7 +43,7 @@ const Home: NextPage = () => {
               id="grid-first-name"
               onSubmit={() => alert('HEr')}
               type="text"
-              placeholder="cardinal-wallet"
+              placeholder="hydra-wallet"
               onChange={(e) => {
                 setWalletName(e.target.value)
               }}

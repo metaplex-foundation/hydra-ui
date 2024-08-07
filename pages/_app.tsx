@@ -1,8 +1,7 @@
 import './styles.css'
-import '@cardinal/namespaces-components/dist/esm/styles.css'
+import 'common/styles.css'
 import type { AppProps } from 'next/app'
 import { WalletProvider } from '@solana/wallet-adapter-react'
-import { WalletIdentityProvider } from '@cardinal/namespaces-components'
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui'
 
 import {
@@ -29,15 +28,15 @@ const App = ({
       <WalletProvider
         wallets={[]}
       >
-        <WalletIdentityProvider>
-          <WalletModalProvider>
+{/*         <WalletIdentityProvider>
+ */}          <WalletModalProvider>
             <>
               <ToastContainer />
               <Component {...pageProps} />
             </>
           </WalletModalProvider>
-        </WalletIdentityProvider>
-      </WalletProvider>
+{/*         </WalletIdentityProvider>
+ */}      </WalletProvider>
     </EnvironmentProvider>
     </>
   )

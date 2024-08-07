@@ -63,7 +63,7 @@ const Home: NextPage = () => {
         throw 'Please specify at least one member'
       }
       if (!hydraWalletMembers || hydraWalletMembers.length > 9) {
-        throw 'Too many members - submit a PR to https://github.com/cardinal-labs/hydra-ui to increase this minimum'
+        throw 'Too many members - submit a PR to https://github.com/metaplex-foundation/hydra-ui/ to increase this maximum'
       }
 
       const fanoutId = (await FanoutClient.fanoutKey(walletName))[0]
@@ -145,7 +145,7 @@ const Home: NextPage = () => {
               className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-3 leading-tight focus:outline-none focus:bg-white"
               name="grid-first-name"
               type="text"
-              placeholder="cardinal-wallet"
+              placeholder="hydra-wallet"
               onChange={(e) => {
                 setWalletName(e.target.value)
                 setSuccess(false)
