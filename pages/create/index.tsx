@@ -2,8 +2,6 @@ import { Fanout, FanoutClient, MembershipModel } from '@metaplex-foundation/mpl-
 import { Wallet } from '@saberhq/solana-contrib'
 import { useWallet } from '@solana/wallet-adapter-react'
 import { Transaction } from '@solana/web3.js'
-import { AsyncButton } from 'common/Button'
-import { Header } from 'common/Header'
 import { notify } from 'common/Notification'
 import { executeTransaction } from 'common/Transactions'
 import { getPriorityFeeIx, tryPublicKey } from 'common/utils'
@@ -11,260 +9,86 @@ import { asWallet } from 'common/Wallets'
 import type { NextPage } from 'next'
 import { useEnvironmentCtx } from 'providers/EnvironmentProvider'
 import { useState } from 'react'
+import { useAnalytics } from '@/hooks'
+import { DashboardLayout } from '@/components/layout/DashboardLayout'
+import { Section } from '@/components/primitives/Section'
+import { CreateWalletStepper, StepMember } from '@/components/wallet/CreateWalletStepper'
 
 const Home: NextPage = () => {
   const { connection } = useEnvironmentCtx()
   const wallet = useWallet()
-  const [walletName, setWalletName] = useState<undefined | string>(undefined)
-  const [totalShares, setTotalShares] = useState<undefined | number>(100)
-  const [success, setSuccess] = useState(false)
-  const [hydraWalletMembers, setHydraWalletMembers] = useState<
-    { memberKey?: string; shares?: number }[]
-  >([{ memberKey: undefined, shares: undefined }])
+  const { track } = useAnalytics()
+  const [successName, setSuccessName] = useState<string | null>(null)
 
-  const validateAndCreateWallet = async () => {
+  const handleComplete = async (data: { name: string; totalShares: number; members: StepMember[] }) => {
     try {
-      if (!wallet.publicKey) {
-        throw 'Please connect your wallet'
-      }
-      if (!walletName) {
-        throw 'Specify a wallet name'
-      }
-      if (walletName.includes(' ')) {
-        throw 'Wallet name cannot contain spaces'
-      }
-      if (!totalShares) {
-        throw 'Please specify the total number of shares for distribution'
-      }
-      if (totalShares <= 0) {
-        throw 'Please specify a positive number of shares'
-      }
-      let shareSum = 0
-      for (const member of hydraWalletMembers) {
-        if (!member.memberKey) {
-          throw 'Please specify all member public keys'
-        }
-        if (!member.shares) {
-          throw 'Please specify all member shares'
-        }
-        const memberPubkey = tryPublicKey(member.memberKey)
-        if (!memberPubkey) {
-          throw 'Invalid member public key, unable to cast to PublicKey'
-        }
-        if (member.shares <= 0) {
-          throw 'Member shares cannot be negative or zero'
-        }
-        shareSum += member.shares
-      }
-      if (shareSum !== totalShares) {
-        throw `Sum of all shares must equal ${totalShares}`
-      }
-      if (!hydraWalletMembers || hydraWalletMembers.length == 0) {
-        throw 'Please specify at least one member'
-      }
-      if (!hydraWalletMembers || hydraWalletMembers.length > 9) {
-        throw 'Too many members - submit a PR to https://github.com/metaplex-foundation/hydra-ui/ to increase this maximum'
+      if (!wallet.publicKey) throw 'Please connect your wallet'
+      track({ name: 'wallet_create_initiated' })
+
+      const { name, totalShares, members } = data
+      if (!name || name.includes(' ')) throw 'Invalid wallet name'
+      if (!totalShares || totalShares <= 0) throw 'Total shares must be positive'
+      if (!members.length) throw 'At least one member required'
+      if (members.length > 9) throw 'Too many members (max 9)'
+      const shareSum = members.reduce((s,m)=> s + (m.shares||0), 0)
+      if (shareSum !== totalShares) throw 'Allocated shares must sum to total'
+      for (const m of members) {
+        if (!m.memberKey) throw 'Missing member key'
+        const k = tryPublicKey(m.memberKey)
+        if (!k) throw 'Invalid member public key'
+        if (!m.shares || m.shares <= 0) throw 'Invalid member shares'
       }
 
-      const fanoutId = (await FanoutClient.fanoutKey(walletName))[0]
+      const fanoutId = (await FanoutClient.fanoutKey(name))[0]
       const [nativeAccountId] = await FanoutClient.nativeAccount(fanoutId)
       const fanoutSdk = new FanoutClient(connection, asWallet(wallet!))
       try {
-        let fanoutData = await fanoutSdk.fetch<Fanout>(fanoutId, Fanout)
-        if (fanoutData) {
-          throw `Wallet '${walletName}' already exists`
-        }
-      } catch (e) {}
+        const existing = await fanoutSdk.fetch<Fanout>(fanoutId, Fanout)
+        if (existing) throw `Wallet '${name}' already exists`
+      } catch (_) { /* ignore fetch error if not found */ }
+
       const transaction = new Transaction()
-      transaction.add(
-        ...(
-          await fanoutSdk.initializeFanoutInstructions({
-            totalShares,
-            name: walletName,
-            membershipModel: MembershipModel.Wallet,
-          })
-        ).instructions
-      )
-      for (const member of hydraWalletMembers) {
-        transaction.add(
-          ...(
-            await fanoutSdk.addMemberWalletInstructions({
-              fanout: fanoutId,
-              fanoutNativeAccount: nativeAccountId,
-              membershipKey: tryPublicKey(member.memberKey)!,
-              shares: member.shares!,
-            })
-          ).instructions
-        )
+      transaction.add(...(await fanoutSdk.initializeFanoutInstructions({
+        totalShares,
+        name,
+        membershipModel: MembershipModel.Wallet,
+      })).instructions)
+      for (const m of members) {
+        transaction.add(...(await fanoutSdk.addMemberWalletInstructions({
+          fanout: fanoutId,
+          fanoutNativeAccount: nativeAccountId,
+          membershipKey: tryPublicKey(m.memberKey!)!,
+          shares: m.shares!,
+        })).instructions)
       }
       transaction.feePayer = wallet.publicKey!
       const priorityFeeIx = await getPriorityFeeIx(connection, transaction)
       transaction.add(priorityFeeIx)
       await executeTransaction(connection, wallet as Wallet, transaction, {})
-      setSuccess(true)
+      setSuccessName(name)
+      track({ name: 'wallet_create_success', id: name })
     } catch (e) {
-      notify({
-        message: `Error creating hydra wallet`,
-        description: `${e}`,
-        type: 'error',
-      })
+      notify({ message: 'Error creating hydra wallet', description: `${e}` , type: 'error'})
     }
   }
 
   return (
-    <div className="bg-white h-screen max-h-screen">
-      <Header />
-      <main className="h-[80%] py-16 flex flex-1 flex-col justify-center items-center">
-        {success && (
-          <div className="text-gray-700 bg-green-300 w-full max-w-lg text-center py-3 mb-10">
-            <p className="font-bold uppercase tracking-wide">
-              Hydra Wallet Created
-            </p>
-            <p>
-              {' '}
-              Access the wallet at{' '}
-              <a
-                href={`/${walletName}${window.location.search ?? ''}`}
-                className="text-blue-600 hover:text-blue-500"
-              >
-                {window.location.origin}/{walletName}
-                {window.location.search ?? ''}
-              </a>
-            </p>
-          </div>
-        )}
-        <form className="w-full max-w-lg">
-          <div className="w-full mb-6">
-            <label
-              className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              htmlFor="grid-first-name"
-            >
-              Hydra Wallet Name
-            </label>
-            <input
-              className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-3 leading-tight focus:outline-none focus:bg-white"
-              name="grid-first-name"
-              type="text"
-              placeholder="hydra-wallet"
-              onChange={(e) => {
-                setWalletName(e.target.value)
-                setSuccess(false)
-              }}
-              value={walletName}
-            />
-          </div>
-          <div className="w-full mb-6">
-            <label
-              className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2"
-              htmlFor="grid-first-name"
-            >
-              Total Shares
-            </label>
-            <input
-              className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-3 leading-tight focus:outline-none focus:bg-white"
-              name="grid-first-name"
-              type="number"
-              onChange={(e) => {
-                setTotalShares(parseInt(e.target.value))
-              }}
-              value={totalShares}
-            />
-          </div>
-          <div className="flex flex-wrap mb-6">
-            <div className="w-4/5 pr-3 mb-6 md:mb-0">
-              <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">
-                Wallet Address
-              </label>
-              {hydraWalletMembers &&
-                hydraWalletMembers.map((member, i) => {
-                  return (
-                    <input
-                      key={i}
-                      name="memberKey"
-                      className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-3 leading-tight focus:outline-none focus:bg-white"
-                      id="grid-first-name"
-                      type="text"
-                      placeholder="Cmw...4xW"
-                      onChange={(e) => {
-                        const walletMembers = hydraWalletMembers
-                        walletMembers[i]!.memberKey = e.target.value
-                        setHydraWalletMembers([...walletMembers])
-                      }}
-                      value={member.memberKey}
-                    />
-                  )
-                })}
-            </div>
-            <div className="w-1/5">
-              <label className="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2">
-                Shares {totalShares ? `/ ${totalShares}` : ''}
-              </label>
-              {hydraWalletMembers.map((member, i) => {
-                return (
-                  <div className="flex" key={`share-${i}`}>
-                    <input
-                      className="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-3 leading-tight focus:outline-none focus:bg-white"
-                      id="grid-last-name"
-                      type="number"
-                      placeholder="50"
-                      onChange={(e) => {
-                        const walletMembers = hydraWalletMembers
-                        walletMembers[i]!.shares = parseInt(e.target.value)
-                        setHydraWalletMembers([...walletMembers])
-                      }}
-                      value={member.shares}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-          <div className="flex justify-between">
-            <div>
-              <button
-                type="button"
-                className="bg-gray-200 text-gray-600 hover:bg-gray-300 px-4 py-3 rounded-md mr-3"
-                onClick={() =>
-                  setHydraWalletMembers([
-                    ...hydraWalletMembers,
-                    {
-                      memberKey: undefined,
-                      shares: undefined,
-                    },
-                  ])
-                }
-              >
-                Add Member
-              </button>
-              <button
-                type="button"
-                className="bg-gray-200 text-gray-600 hover:bg-gray-300 px-4 py-3 rounded-md "
-                onClick={() =>
-                  setHydraWalletMembers(
-                    hydraWalletMembers.filter(
-                      (item, index) => index !== hydraWalletMembers.length - 1
-                    )
-                  )
-                }
-              >
-                Remove Member
-              </button>
-            </div>
-            <div>
-              <AsyncButton
-                type="button"
-                bgColor="rgb(96 165 250)"
-                variant="primary"
-                className="bg-blue-400 text-white hover:bg-blue-500 px-4 py-3 rounded-md"
-                handleClick={async () => validateAndCreateWallet()}
-              >
-                Create Hydra Wallet
-              </AsyncButton>
-            </div>
-          </div>
-        </form>
-      </main>
-    </div>
+    <DashboardLayout>
+      <div className="page-offset-top" />
+      <Section
+        heading="Create Hydra Wallet"
+        description="Set up a new treasury wallet with member shares and distribution rules."
+        spacing="lg"
+        className="text-center"
+      />
+      {successName && (
+        <div className="mb-10 rounded-xl border border-green-500/30 bg-green-900/20 backdrop-blur p-6 md:p-8 flex flex-col md:flex-row items-start md:items-center gap-4 shadow-lg shadow-green-900/20">
+          <div className="text-green-300 text-xl font-semibold flex items-center gap-2"><span>✅</span>Wallet Created Successfully</div>
+          <div className="text-green-200/90 text-sm md:text-base leading-relaxed">Access it at{' '}<a href={`/${successName}${window.location.search ?? ''}`} className="font-semibold underline hover:no-underline text-green-300 hover:text-green-200 transition-colors">/{successName}</a></div>
+        </div>
+      )}
+      <CreateWalletStepper onComplete={handleComplete} />
+    </DashboardLayout>
   )
 }
 

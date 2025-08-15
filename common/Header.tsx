@@ -48,7 +48,7 @@ export const Header = () => {
     <div className={`flex flex-row h-20 justify-between pl-5 text-white`}>
       <div className="flex items-center gap-3">
         <div
-          className="text-gray-700 font-bold uppercase tracking-wide hover:cursor-pointer"
+          className="font-heading text-xl font-semibold tracking-wide hover:cursor-pointer text-white"
           onClick={() =>
             router.push(
               `/${
@@ -72,7 +72,7 @@ export const Header = () => {
       </div>
 
       <div className="relative my-auto flex items-center pr-8 align-middle">
-        <div className="relative my-auto flex items-center align-middle text-gray-700 font-bold uppercase tracking-wide">
+  <div className="relative my-auto flex items-center align-middle font-heading text-sm font-medium tracking-wide text-white/80">
           <div
             onClick={() =>
               router.push(

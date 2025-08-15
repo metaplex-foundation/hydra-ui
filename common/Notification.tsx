@@ -3,7 +3,7 @@ import { Cluster } from '@solana/web3.js'
 import { lighten } from 'polished'
 import React, { CSSProperties } from 'react'
 import toast, { resolveValue, ToastBar, Toaster } from 'react-hot-toast'
-import { VscClose } from 'react-icons/vsc'
+import { VscClose } from 'react-icons/vsc/index.js'
 import { getColorByBgColor } from './utils'
 
 interface INotifyArgs {
